@@ -1,0 +1,2485 @@
+---
+title: "Project-CHSI"
+output: word_document
+---
+# Introduction
+CDC(Centers for Disease control and prevention) helps protect America from health, safety and security threats, both foreign and in the U.S. whether diseases start at home or abroad, are chronic or acute, curable or preventable, human error or deliberate attack, CDC fights disease and supports communities and citizens to do the same.
+
+CDC increases the health security of our nation. As the nation’s health protection agency, CDC saves lives and protects people from health threats. To accomplish our mission, CDC conducts critical science and provides health information that protects our nation against expensive and dangerous health threats, and responds when these arise. Centers for Disease Control and Prevention (CDC) Community Health Status Indicators is a website that provides health profiles for all U.S. counties, including health outcomes, population health status, healthcare access and quality, health behaviors, social factors and the physical environment
+
+**CDC’s Role:**
+* Detecting and responding to new and emerging health threats
+* Tackling the biggest health problems causing death and disability for Americans
+* Putting science and advanced technology into action to prevent disease
+* Promoting healthy and safe behaviors, communities and environment
+* Developing leaders and training the public health workforce, including disease detectives
+* Taking the health pulse of our nation
+
+CDC produces Community Health Status Indicators (CHSI) for all 3,143 counties in the United States. Each profile includes key indicators of health outcomes, which describes the population health status of a county and factors that have the potential to influence health outcomes, such as health care access and quality, health behaviors, social factors, and the physical environment.
+
+```{r setup, include=FALSE}
+####################### Initial Import Data (Below)  ######################## ######################################################################
+# load required packages using a bulk check/install function
+packages <- c("cowplot", "googleway", "ggplot2", "ggrepel",  "ggspatial", "lwgeom", "sf", "rnaturalearth",
+              "rnaturalearthdata","maps","dplyr", "sqldf","readr","reshape","neuralnet","dplyr","e1071","kernlab",
+              "googleway","rgeos","rgdal","maptools","scales","shiny","tidyverse")
+## function to check for libraries and install if necessary.
+package.check <- lapply(packages, FUN = function(x) {
+  if (!require(x, character.only = TRUE)) {
+    install.packages(x, dependencies = TRUE)
+    library(x, character.only = TRUE)
+  }
+})
+
+#This script imports data from the chsi dataset and combines several sheets to
+#make it easier to work with. You need to run it from within the folder that
+#contains all the individual csv files
+
+# use sqldf for joins
+library(sqldf)
+library(readr)
+
+#!!change to your own directory where the CSV files are located!!
+setwd("/Users/shilpaks/Documents/Syracuse_Graduation/Fall term 2019/Data Analytics/Project/chsi_dataset")
+#dir_local <- DirSource("chsi_dataset")
+#this is the one that explains what columns mean
+key = read.csv("DATAELEMENTDESCRIPTION.csv")
+
+#Healthypeople is a reference sheet; we shouldn't join it. Instead, we'll use it
+#later for comparison to standards
+healthypeople = read_csv("HEALTHYPEOPLE2010.csv")
+
+#These 5 will be combined
+demographics = read_csv("DEMOGRAPHICS.csv")
+vulnpopsandenvhealth = read_csv("VUNERABLEPOPSANDENVHEALTH.csv")
+riskfactors = read_csv("RISKFACTORSANDACCESSTOCARE.csv")
+leadingcausesofdeath = read_csv("LEADINGCAUSESOFDEATH.csv")
+summarymeasures = read_csv("SUMMARYMEASURESOFHEALTH.csv")
+  
+combined <- sqldf('
+select 
+  d.county_fips_code  ,d.state_fips_code  ,d.chsi_county_name  ,d.chsi_state_name  ,d.chsi_state_abbr  ,d.strata_id_number  ,d.strata_determining_factors  ,d.number_counties  ,d.population_size  ,d.population_density  ,d.poverty  ,d.Age_19_Under  ,d.Age_19_64 ,d.Age_65_84, d.Age_85_and_Over, d.White, d.Black, d.Native_American, d.Asian, d.Hispanic, v.No_HS_Diploma, v.Unemployed, v.Sev_Work_Disabled, v.Major_Depression, v.Recent_Drug_Use, v.Ecol_Rpt, v.Ecol_Rpt_Ind, v.Ecol_Exp, v.Salm_Rpt, v.Salm_Rpt_Ind , v.Salm_Exp, v.Shig_Rpt, v.Shig_Rpt_Ind, v.Shig_Exp, v.Toxic_Chem, v.Carbon_Monoxide_Ind, v.Nitrogen_Dioxide_Ind, v.Sulfur_Dioxide_Ind, v.Ozone_Ind, v.Particulate_Matter_Ind,  v.Lead_Ind, v.EH_Time_Span, r.No_Exercise, r.Few_Fruit_Veg, r.Obesity, r.High_Blood_Pres, r.Smoker, r.Diabetes, r.Uninsured, r.Elderly_Medicare, r.Disabled_Medicare, r.Prim_Care_Phys_Rate, r.Dentist_Rate, r.Community_Health_Center_Ind, r.HPSA_Ind, l.A_Wh_Comp, l.A_Bl_Comp, l.A_Ot_Comp, l.A_Hi_Comp, l.A_Wh_BirthDef, l.A_Bl_BirthDef, l.A_Ot_BirthDef, l.A_Hi_BirthDef, l.B_Wh_Injury, l.B_Bl_Injury, l.B_Ot_Injury, l.B_Hi_Injury, l.B_Wh_Cancer, l.B_Bl_Cancer, l.B_Ot_Cancer, l.B_Hi_Cancer, l.B_Wh_Homicide, l.B_Bl_Homicide, l.B_Ot_Homicide, l.B_Hi_Homicide, l.C_Wh_Injury, l.C_Bl_Injury, l.C_Ot_Injury, l.C_Hi_Injury, l.C_Wh_Homicide, l.C_Bl_Homicide, l.C_Ot_homicide, l.C_Hi_Homicide, l.C_Wh_Suicide, l.C_Bl_Suicide, l.C_Ot_Suicide, l.C_Hi_Suicide, l.C_Wh_Cancer, l.C_Bl_Cancer, l.C_Ot_Cancer, l.C_Hi_Cancer, l.D_Wh_Injury, l.D_Bl_Injury, l.D_Ot_Injury, l.D_Hi_Injury, l.D_Wh_Cancer, l.D_Bl_Cancer, l.D_Ot_Cancer, l.D_Hi_Cancer, l.D_Wh_HeartDis, l.D_Bl_HeartDis, l.D_Ot_HeartDis, l.D_Hi_HeartDis, l.D_Wh_Suicide, l.D_Bl_Suicide, l.D_Ot_Suicide, l.D_Hi_Suicide, l.D_Wh_HIV, l.D_Bl_HIV, l.D_Ot_HIV, l.D_Hi_HIV, l.D_Wh_Homicide, l.D_Bl_Homicide, l.D_Ot_Homicide, l.D_Hi_Homicide, l.E_Wh_Cancer, l.E_Bl_Cancer, l.E_Ot_Cancer, l.E_Hi_Cancer, l.E_Wh_HeartDis, l.E_Bl_HeartDis, l.E_Ot_HeartDis, l.E_Hi_HeartDis, l.F_Wh_HeartDis, l.F_Bl_HeartDis, l.F_Ot_HeartDis, l.F_Hi_HeartDis, l.F_Wh_Cancer, l.F_Bl_Cancer, l.F_Ot_Cancer, l.F_Hi_Cancer, l.LCD_Time_Span, s.ALE, s.US_ALE, s.All_Death  ,s.US_All_Death, s.Health_Status, s.US_Health_Status, s.Unhealthy_Days
+,s.US_Unhealthy_Days 
+from demographics d 
+left join vulnpopsandenvhealth v on v.county_fips_code=d.county_fips_code and v.state_fips_code=d.state_fips_code
+left join riskfactors r on r.county_fips_code=d.county_fips_code and r.state_fips_code=d.state_fips_code
+left join leadingcausesofdeath l on l.county_fips_code=d.county_fips_code and l.state_fips_code=d.state_fips_code
+left join summarymeasures s on s.county_fips_code=d.county_fips_code and s.state_fips_code=d.state_fips_code
+' )
+
+# We know that negative numbers are really NAs; let's replace them
+combined[,-1:-7] <-  data.frame(lapply(combined[,-1:-7], function(x){
+    as.numeric(gsub("-1*|-2*|-9*",NA,x))
+}))
+
+str(combined)
+write_csv(combined,'combined.csv')
+
+#replace NAs with mean of column auto
+na_mean_swap <- function(x) {
+  replace(x, is.na(x),mean(as.numeric(x),na.rm=TRUE))
+}
+
+mean_clean <- cbind(combined[,1:7],replace(combined[,-1:-7],TRUE, lapply(combined[,-1:-7], na_mean_swap)))
+str(mean_clean)
+```
+# Exploratory Data Analysis
+
+## Overview of Data
+Our team was interested in finding a data set in the area of public health. We were looking for a data set that would help us better understand a broad set of health conditions, populations, and potential correlations. This project is an exercise in taking a large pool of data across a variety of metrics and generating relevant questions. Through the use of tools and techniques learned in this course, we will use those insights, which could be used to drive actions for specific populations.
+
+The data set we chose was the Community Health Status Indicators (CHSI) to combat obesity, heart disease, and cancer that are major components of the Community Health Data Initiative. This dataset provides key health indicators for local communities and encourages dialogue about actions that can be taken to improve community health (e.g., obesity, heart disease, cancer). 
+
+The data set has a broad array of health metrics as well as statistics around vulnerable populations, life expectancy and death rates. In reviewing the raw data we felt the goal was to give local public health agencies a set of tools that could help improve the health of their community by identifying root causes and at-risk populations.
+Website: https://healthdata.gov/dataset/community-health-status-indicators-chsi-combat-obesity-heart-disease-and-cancer
+
+## Data Acquisition, Cleaning, Transformation
+The file was a zip file that contained several CSV files:
+* DATA_ELEMENT_DESCRIPTION.csv defines each data element and indicates where its description is found in Data Sources, Definitions, and Notes.
+* DEFINED_DATA_VALUE.csv defines the meaning of specific values (such as missing or suppressed data).  
+* HEALTHY_PEOPLE_2010.csv identifies the Healthy People 2010 Targets and the U.S. Percentages or Rates.
+* DEMOGRAPHICS.csv identifies the data elements and values in the Demographics indicator domain.
+* LEADING_CAUSES_OF_DEATH.csv identifies the data elements and values in the Leading Causes of Death indicator domain.
+* SUMMARY_MEASURES_OF_HEALTH.csv identifies the data elements and values in the Summary Measures of Health indicator domain.
+* MEASURES_OF_BIRTH_AND_DEATH.csv identifies the data elements and values in the Measures of Birth and Death indicator domain.
+* RELATIVE_HEALTH_IMPORTANCE.csv identifies the data elements and values in the Relative Health Importance indicator domain.
+* VULNERABLE_POPS_AND_ENV_HEALTH.csv identifies the data elements and values in the Vulnerable Populations and Environmental Health indicator domain.
+*PREVENTIVE_SERVICES_USE.csv identifies the data elements and values in the Preventive Services indicator domain.
+* RISK_FACTORS_AND_ACCESS_TO_CARE.csv identifies the data elements and values in the Risk Factors and Access to Care indicator domain.
+
+In order to provide a robust dataset for our project, we chose a large health dataset containing 573 unique columns for every county in the United States. This broad scope of our dataset was so large that we needed to reduce it in order to focus on key health indicators. 
+
+The subset of data we selected included health afflictions, descriptive characteristics, and risk factors. Health afflictions included diseases such as cancer, high blood pressure, and various STIs. Descriptive characteristics in the data included identifiers like poverty, lack of high school education, unemployment, and depression rates. Other data included risk factors such as a lack of healthy eating--defined as few fruits and vegetables--lack of exercise, smoking rates, and frequent drug use. Many of the indicators in our dataset included measures related to ethnicity and age. For example, we can look at the number of white people under 18 with cancer in each county.
+
+Ultimately we selected a subset that helped us understand the factors that represent and influence US county health. 
+
+## Exploratory Data Analysis 
+
+### Demographics
+At the beginning of the project, we ran simple analytics to better understand the data and distribution. The bar chart (Figure 1) highlights the average age of the US population and the distribution. The largest bucket is 19-64 (+50%) of the population. It would have been more beneficial if this data had been broken down further; we would have changed the buckets to showcase by ~10-year increments
+
+Next, we looked at another demographic variable, ethnicity. The combination of age/ethnicity would become important for the design of any health program or intervention that is targeted within a certain community. As such, we looked to better understand the national averages and distribution before we dove into a region or county (Figure 2).
+
+So far our statistical analysis has highlighted a largely white population in the age range of 19-64, which is not all that surprising (data ~ 2010). 
+
+```{r demographs, include=TRUE}
+#####Bar Graphs for Demographics######
+#Transform demographics for valid columns
+# subset data to only include some columns
+demographics <- subset(combined, select = 
+                               c(CHSI_County_Name:CHSI_State_Abbr, Population_Size, 
+                                 Population_Density, Poverty, Age_19_Under, Age_19_64, 
+                                 Age_65_84, Age_85_and_Over, White, Black, Native_American, Asian, Hispanic))
+# clean names of the subset
+nms_demo_dat <- c("county.name","state.name","state.abbr","pop.size","pop.density",
+                  "poverty","age.19_under","age.19_64","age.65_84","age.85_over",
+                  "white","black","nat.amer","asian","hispanic")
+# change col names
+names(demographics)<-nms_demo_dat
+#This data is a representation at the county level
+#we have to do some work to find it at state level
+mean(demographics$pop.size)
+max(demographics$pop.size)
+min(demographics$pop.size)
+sd(demographics$pop.size)
+#made with help from R Studio Community
+library(tidyverse) #load library
+# build vectors  
+county <- c(demographics$county.name)
+state <- c(demographics$state.name)
+pop <- c(demographics$pop.size)
+# now we assemble into data frame from vectors
+df <- data.frame(county, state, pop)
+# assembled pipe 
+stateandmeanpop <- df %>% group_by(state) %>% summarize(mean_pop = mean(pop))
+stateandsumpop <- df %>% group_by(state) %>% summarize(mean_pop = sum(pop))
+#Now we have a dataframe we can make different charts from
+#with each states mean population
+#This is the true mean of the population in our dataset  
+mean(stateandmeanpop$mean_pop)
+#This is the range of the population in our dataset
+max(stateandmeanpop$mean_pop)
+min(stateandmeanpop$mean_pop)
+sd(stateandmeanpop$mean_pop)
+#B.	Show mean age, and ranges (a distribution would be a good visual for this as well)
+#We can do the same with age. 
+demographics$age.19_underraw = (demographics$pop.size*demographics$age.19_under/100)
+demographics$age.19_64raw = (demographics$pop.size*demographics$age.19_64/100)
+demographics$age.65_84raw = (demographics$pop.size*demographics$age.65_84/100)
+demographics$age.85_overraw = (demographics$pop.size*demographics$age.85_over/100)
+xviiii_U <- mean(demographics$age.19_under)
+max(demographics$age.19_under)
+min(demographics$age.19_under)
+
+xvii_lxiv <- mean(demographics$age.19_64)
+max(demographics$age.19_64)
+min(demographics$age.19_64)
+
+lxv_lxxxiv <- mean(demographics$age.65_84)
+max(demographics$age.65_84)
+min(demographics$age.65_84)
+
+lxxxv_O <- mean(demographics$age.85_over)
+max(demographics$age.85_over)
+min(demographics$age.85_over)
+meanofage <- c(xviiii_U, xvii_lxiv, lxv_lxxxiv, lxxxv_O)
+barplot (meanofage,
+         main = "Figure 1 - National Age %",
+         xlab = "Mean % Age",
+         ylab = "Population %",
+         names.arg = c("Under19", "19-64", "65-84", "Over85"),
+         col = "blue",
+         horiz = FALSE)
+#C.	Show ethnicity nationally (e.g. 87% white, etc.) - bar chart for visual
+#How to create raw population numbers for age and ethnicity
+#First we have to add new columns in the data.frame with the raw data
+demographics$whiteraw = (demographics$pop.size*demographics$white/100)
+demographics$blackraw = (demographics$pop.size*demographics$black/100)
+demographics$hispanicraw = (demographics$pop.size*demographics$hispanic/100)
+demographics$asianraw = (demographics$pop.size*demographics$asian/100)
+demographics$nat.amerraw = (demographics$pop.size*demographics$nat.amer/100)
+total_population <- sum(demographics$whiteraw) + sum(demographics$blackraw) + sum(demographics$hispanicraw) + sum(demographics$asianraw) + sum(demographics$nat.amerraw)
+#Create mean vectors for each ethnicity
+w <- mean(demographics$whiteraw)
+b <- mean(demographics$blackraw)
+h <- mean(demographics$hispanicraw)
+a <- mean(demographics$asianraw)
+n.a <- mean(demographics$nat.amerraw)
+#Create dataframe
+meanofrace <- c(w,b,h,a,n.a)
+#converting into percentages
+w_percent <- (sum(demographics$whiteraw)/total_population)*100
+b_percent <- (sum(demographics$blackraw)/total_population)*100
+h_percent <- (sum(demographics$hispanicraw)/total_population)*100
+a_percent <- (sum(demographics$asianraw)/total_population)*100
+nat_percent <- (sum(demographics$nat.amerraw)/total_population)*100
+percentofrace <- c(w_percent,b_percent,h_percent,a_percent,nat_percent)
+#Create bar chart 
+barplot (percentofrace,
+        main = "Figure 2 - National Mean Ethnicity",
+        xlab = "Ethnicity",
+        ylab = "Population(%)",
+        names.arg = c("White", "Black", "Hispanic", "Asian", "NativeAmerican"),
+        col = "darkred",
+        horiz = FALSE)
+
+```
+### Population Health Statistics
+The data set contained rich information pertaining to life expectancy and major risk factors contributing to the reduction in life expectancy. The goal, is to use this data to better understand how to reduce the risk of premature death. In looking at the major contributors to premature death; High Blood pressure, No Exercise, Obesity, and Smoking led the way (Figure 3). 
+
+It was analyzed to see what percent of the population of the death was caused due to Suicide and homicide(Figure 5). This actually shows the mental state of the population to a certain extent. ~25% of death is caused due to suicide and homicide which is a high number of the population. Below states seem to have a higher rate in 2015
+* Texas
+* New England
+* Montana
+* Colorado
+
+```{r dataexploration, include=TRUE}
+############# Barchart Summary of Variables Most Affecting Death #############
+#####################################################################
+#this is from the section which takes population and percent of population into #consideration. It's a true average of the population as values are originally presented #as percentage of county.
+#This calculates the count then takes percent of the US
+library(tidyverse)
+vuln <- sqldf('
+          	select
+            	county_fips_code
+            	,state_fips_code
+            	,chsi_county_name
+            	,chsi_state_name
+            	,population_size
+            	,poverty
+            	,No_HS_Diploma
+            	,Unemployed
+            	,Sev_Work_Disabled
+            	,Major_Depression
+            	,Recent_Drug_Use
+            	,No_Exercise
+            	,Few_Fruit_Veg
+            	,Obesity
+            	,High_Blood_Pres
+            	,Smoker
+            	,Diabetes
+            	,Uninsured
+            	,Elderly_Medicare
+            	,Disabled_Medicare
+            	,Prim_Care_Phys_Rate
+            	,Dentist_Rate
+            	,ALE
+            	,All_Death
+            	,US_All_Death
+          	from combined')
+
+str(vuln)
+#Convert raw count data into percentages so we can compare it across counties with different populations
+vuln$No_HS_Diploma <- vuln$No_HS_Diploma/vuln$Population_Size*100
+vuln$Unemployed <- vuln$Unemployed/vuln$Population_Size*100
+vuln$Sev_Work_Disabled <-vuln$Sev_Work_Disabled/vuln$Population_Size*100
+vuln$Major_Depression <- vuln$Major_Depression/vuln$Population_Size*100
+vuln$Recent_Drug_Use <- vuln$Recent_Drug_Use/vuln$Population_Size*100
+vuln$Uninsured <- vuln$Uninsured/vuln$Population_Size*100
+vuln$Elderly_Medicare <- vuln$Elderly_Medicare/vuln$Population_Size*100
+vuln$Disabled_Medicare <- vuln$Disabled_Medicare/vuln$Population_Size*100
+vuln$DeathRate <- vuln$All_Death/vuln$Population_Size*100
+
+DF_Bar <- sqldf( 'select Poverty,Unemployed,Sev_Work_Disabled,Recent_Drug_Use,No_Exercise,Obesity,High_Blood_Pres,Smoker,Diabetes,Uninsured,Elderly_Medicare, Disabled_Medicare 
+                 from vuln')
+PLot_Bar <- replace(DF_Bar, TRUE, lapply(DF_Bar, na_mean_swap))
+#calculate mean of each column
+PLot_Bar <- colMeans(PLot_Bar)
+#assistance from Quick-R by DataCamp
+#used melt from 
+library(reshape)
+#this makes each row a unique id-variable combination
+PLot_Bar <- melt(PLot_Bar)
+PLot_Bar$Variables <- rownames(PLot_Bar)
+#used Cookbook for R, Colors(ggplot2) for assistance
+#toned the colors down to be a bit darker and match the colors of our other graphs
+BarPlotFin<- ggplot(data=PLot_Bar) + geom_bar(aes(x = Variables,y=value,fill=Variables),stat="identity") + coord_flip() +scale_fill_hue(l=45) + ggtitle('Figure 3 - Population Health Statistics')
+BarPlotFin
+
+############### Plot Average Life Expectancy by State ####################
+#assistance from https://www.datanovia.com/en/blog/ggplot-themes-gallery/
+Life_Exp_States <- ggplot(data = mean_clean, aes(x=CHSI_State_Abbr, y = ALE, color = ALE, group=CHSI_State_Abbr)) + 
+  geom_point() +
+  scale_color_continuous(name = "Average Age") +
+  theme_classic() +
+  xlab(label = "States") +
+  ylab(label = "Average Life Expectancy") + 
+  ggtitle(label = "Figure 4 - State Average Life Expectancy") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+Life_Exp_States
+################### plot ALE Under 1st Quartile #######################
+#################################################################
+Life_Exp_75 <- ggplot(data = mean_clean[mean_clean$ALE<75,], aes(x=CHSI_State_Abbr, y = ALE, color = ALE, group=CHSI_State_Abbr)) + 
+  geom_point() +
+  scale_color_continuous(name = "Average Age") +
+  theme_classic() +
+  xlab(label = "States") +
+  ylab(label = "Average Life Expectancy") + 
+  scale_y_reverse() +
+  ggtitle(label = "State ALE Below Nation's 1st Quartile") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+Life_Exp_75
+
+
+###############################################################
+######################Death rate- Comparing Suicide, Homicide to the total death in population##############
+#Suicide
+mean_clean$totalSuicide <- mean_clean$C_Bl_Suicide+mean_clean$C_Hi_Suicide+mean_clean$C_Ot_Suicide+mean_clean$C_Wh_Suicide+mean_clean$D_Bl_Suicide+mean_clean$D_Wh_Suicide+mean_clean$D_Hi_Suicide+mean_clean$D_Ot_Suicide
+mean_clean$percentSuicide <- (mean_clean$totalSuicide/mean_clean$Population_Size)*100
+#Homiside
+mean_clean$totalHomicide <- mean_clean$C_Bl_Homicide+mean_clean$C_Hi_Homicide+mean_clean$C_Wh_Homicide+mean_clean$D_Bl_Homicide+mean_clean$D_Wh_Homicide+mean_clean$D_Hi_Homicide
+mean_clean$percentHomicide <- (mean_clean$totalHomicide/mean_clean$Population_Size)*100
+mean_clean$percentAllDeath <- (mean_clean$All_Death/mean_clean$Population_Size)*100
+deathDf <- sqldf('select percentSuicide, percentHomicide, percentAllDeath from mean_clean')
+deathDfMeans <- colMeans(deathDf)
+deathDfMeans <- melt(deathDfMeans)
+deathDfMeans$variables <- rownames(deathDfMeans)
+BarPlotDeath<- ggplot(data=deathDfMeans) + geom_bar(aes(x = variables,y=value,fill=variables),stat="identity") + coord_flip() +scale_fill_hue(l=45) + ggtitle('Figure 5 - Suicide/Homicide Statistics')
+BarPlotDeath
+
+##### Suicide by State####
+#excluding outliers#
+mean_clean_noOutliers <- mean_clean[which(mean_clean$percentSuicide < "100"),]
+Suicide_by_States <- ggplot(data = mean_clean_noOutliers, aes(x=CHSI_State_Abbr, y = percentSuicide, color = percentSuicide, group=CHSI_State_Abbr)) + 
+  geom_point() +
+  scale_color_continuous(name = "Percent Suicide") +
+  theme_classic() +
+  xlab(label = "States") +
+  ylab(label = "% of Suicides") + 
+  ggtitle(label = "Figure 5 - Suicides by State") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+Suicide_by_States
+
+##### Homicide by State####
+Homicide_by_States <- ggplot(data = mean_clean, aes(x=CHSI_State_Abbr, y = percentHomicide, color = percentHomicide, group=CHSI_State_Abbr)) + 
+  geom_point() +
+  scale_color_continuous(name = "Percent Homicide") +
+  theme_classic() +
+  xlab(label = "States") +
+  ylab(label = "% of Homicide") + 
+  ggtitle(label = "Figure 6 - Homicides by State") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+Homicide_by_States
+################ Plot of Smokers relating to ALE and Exercise ################ #####################################################################
+# Shows a plot of no exercise to ALE. Less smoking in green, heavy smoking in blue. 
+#determine the range of smokers 
+summary(combined$Smoker)
+#plot 
+#assistance from https://www.datanovia.com/en/blog/ggplot-themes-gallery/
+gtt <- ggplot(data = combined, aes(x=No_Exercise, y = ALE,   color = Smoker)) + 
+  theme_classic() +  
+  geom_point() +  
+  xlab(label = "Percent not Exercising") +
+  #scale_x_reverse() + #x_axis reversed to show positive correlation
+  ylab(label = "Average Life Expectancy") + 
+  scale_colour_gradient(limits=c(3.6,46.2), low="green", high="red") + #Smoker Range
+  ggtitle(label = "Negative Affects of Smoking and Not Working Out on ALE")
+gtt
+
+```
+# Visualisations
+```{r viz, include=TRUE}
+
+###############################################################################
+##VISUALIZATIONS BANK
+######################################################################
+
+library(tidyverse)
+library(sf)
+library(maps)
+library(ggmap)
+library(ggplot2)
+devtools::install_github("tidyverse/ggplot2", force = TRUE)
+install.packages('testthat')
+
+#################
+# STEP 1 PLOT A WORLD MAP 
+#################
+
+world = ne_countries(scale='medium',returnclass='sf')
+class(world)
+ggplot(data=world) + 
+  geom_sf() +
+  coord_sf()
+##################
+# STEP 2 CREATE AND PLOT ST_AS_SF MAP STATES COUNTIES 
+##################
+
+#turn map state into a shapefile
+states<- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+states <- sf::st_as_sf(map("state",plot=FALSE,fill=TRUE))
+#add coordinates of 'centroid' so we can later plot names
+states <- cbind(states, st_coordinates(st_centroid(states)))
+#label state names as uppercase
+states$name <- toupper(states$ID)
+
+#add us so we can use the limits
+us <- map_data("county")[,c('long','lat')]
+xlimit <- c(max(us$long))
+ylimit <- c(max(us$lat))
+plot(us)
+ggplot() +
+  geom_sf(data = states) +
+  coord_sf(crs = st_crs(102003))
+
+
+ggplot(data=world) + 
+  geom_sf() +
+  geom_sf(data=states,fill=NA) + 
+  geom_label(data=states,aes(X,Y, label=name), size=3) +
+  coord_sf(crs = st_crs(102003))
+counties <- st_as_sf(map("county", plot=FALSE, fill=TRUE))
+plot(counties)
+
+
+countiesG = ggplot(data = states) + 
+  geom_sf() + 
+  geom_sf(data=states,size=0.8) + 
+  geom_sf(data=counties,fill=NA,color=gray(0.5)) + 
+  coord_sf(crs = st_crs(102003),expand=FALSE)
+plot(countiesG)
+
+class(countiesG)
+class(counties)
+
+###############Demographics Maps ####################
+
+class(demographics)
+counties$ID
+demographicsmap = demographics[,c('county.name','state.name','state.abbr',"pop.size","pop.density",
+                                  "poverty","age.19_under","age.19_64","age.65_84","age.85_over",
+                                  "white","black","nat.amer","asian","hispanic")]
+
+demographicsmap$state = tolower(demographicsmap$state.name)
+demographicsmap$county = tolower(demographicsmap$county.name)
+demographicsmap$ID = paste(demographicsmap$state, demographicsmap$county, sep = ',')
+
+d.map = left_join(counties, demographicsmap)
+plot(d.map)
+
+#####interactive map coding#####################
+#Population size###
+
+d.intermap = tm_shape(d.map) + tm_fill("pop.size", legend.show = TRUE, legend.is.portrait = FALSE, legend.hist = FALSE, legend.hist.title = "Population Size United States of America", id = "county", palette = "Greens") + tm_polygons("county", "orange", style = 'class', n = 2, alpha = 1, stretch.palette = FALSE, popup.vars = NA, convert2density = FALSE, midpoint = FALSE)
+tmap_mode("view")
+d.intermap
+d.map$pop.size
+#Population Density Plot and Interactive 
+d.intermap.popden = tm_shape(d.map) + tm_fill("pop.density",legend.show = TRUE, legend.is.portrait = FALSE, legend.hist = FALSE, legend.hist.title = "Population Density, Per County United States of America", id = "county", palette = terrain.colors(7)) + tm_polygons(c("pop.density"), "Red", style = "Kmeans", n = 4, alpha = 2, stretch.palette = FALSE, popup.vars = TRUE, popup.vars = "pop.size", convert2density = TRUE, midpoint = TRUE)
+tmap_mode("plot")
+d.intermap.popden
+d.map$age.19_64
+
+###Age demographics under 19
+d.intermap.age19 = tm_shape(d.map) + tm_fill("age.19_under", id = "county", palette = "Blues", legend.hist = TRUE, legend.hist.title = "Under The Age of 19, Per County United States of America",) + tm_polygons(c("age.19_under","age.19_64"), "White", style = "pretty", n = 4, alpha = 2, stretch.palette = TRUE, popup.vars = TRUE, popup.vars = "pop.size", convert2density = TRUE, midpoint = TRUE )
+tmap_mode("view")
+
+d.intermap.age19
+
+#Age Demographics Above 19 
+
+d.intermap.abv19 = tm_shape(d.map) + tm_fill("age.19_64", id = "county", palette = "RdYlGn", legend.show = TRUE, legend.is.portrait = TRUE, legend.hist = TRUE,legend.format = list(),title = "Above The Age of 19 by County", legend.hist.title = "Above The Age of 19, Per County United States of America",) + tm_polygons("RdYlGn", "White", style = "pretty", n = 4, alpha = 2, stretch.palette = TRUE, popup.format = list(),interval.closure = "left", zindex = NA, group = d.map, popup.vars = d.map$pop.size, convert2density = FALSE, midpoint = NA )
+tmap_mode("plot")
+d.intermap.abv19
+
+
+d.map$
+#####retirement age 
+
+d.intermap.retire = tm_shape(d.map) + tm_fill("age.65_84", id = "county", palette = "Purples", legend.show = TRUE, legend.is.portrait = TRUE, legend.hist = TRUE,legend.format = list(),title = "Retirement Age, Per County", legend.hist.title = "Retirement Age, Per County",) + tm_polygons("RdYlGn", "White", style = "pretty", n = 4, alpha = 2, stretch.palette = TRUE, popup.format = list(),interval.closure = "left", zindex = NA, group = d.map, popup.vars = d.map$pop.size, convert2density = FALSE, midpoint = NA )
+tmap_mode("plot")
+
+d.intermap.retire
+
+
+#######White Population
+
+d.intermap.w = tm_shape(d.map) + tm_fill("white", id = "county", palette = "Spectral", legend.show = TRUE, legend.is.portrait = TRUE, legend.hist = TRUE,legend.format = list(),title = "Demographic: WHITE, Per County", legend.hist.title = "Demographic: WHITE, Per County",) + tm_polygons("RdYlGn", "White", style = "pretty", n = 4, alpha = 2, stretch.palette = TRUE, popup.format = list(),interval.closure = "left", zindex = NA, group = d.map, popup.vars = d.map$pop.size, convert2density = FALSE, midpoint = NA )
+tmap_mode("plot")
+d.intermap.w
+
+
+############ Black Population 
+d.map$black
+
+d.intermap.b = tm_shape(d.map) + tm_fill("black", id = "county", palette = "PRGn", legend.show = TRUE, legend.is.portrait = TRUE, legend.hist = TRUE,legend.format = list(),title = "Demographic: BLACK, Per County", legend.hist.title = "Demographic: BLACK, Per County",) + tm_polygons("PRGn", "White", style = "pretty", n = 4, alpha = 2, stretch.palette = TRUE, popup.format = list(),interval.closure = "right", zindex = NA, group = d.map, popup.vars = "d.map$pop.size", convert2density = FALSE, midpoint = NA )
+
+tmap_mode("plot")
+d.intermap.b
+
+#####Native Americans 
+d.map$nat.amer
+
+d.intermap.na = tm_shape(d.map) + tm_fill("nat.amer", id = "county", palette = "BrBG", legend.show = TRUE, legend.is.portrait = TRUE, legend.hist = TRUE,legend.format = list(),title = "Demographic: Native America, Per County", legend.hist.title = "Demographic: Native American, Per County",) + tm_polygons("BrBG", "White", style = "pretty", n = 4, alpha = 2, stretch.palette = TRUE, popup.format = list(),interval.closure = "right", zindex = NA, group = d.map, popup.vars = "d.map$pop.size", convert2density = FALSE, midpoint = NA )
+
+tmap_mode("plot")
+d.intermap.na
+
+########Asian Americans
+
+
+
+d.intermap.as = tm_shape(d.map) + tm_fill("asian", id = "county", palette = "Reds", legend.show = TRUE, legend.is.portrait = FALSE, legend.hist = FALSE, title = "Demographic: Asians, Per County", legend.hist.title = "Demographic: Asains, Per County",) + tm_polygons("Reds", "White", style = "pretty", n = 4, alpha = 2, stretch.palette = TRUE, popup.format = list(),interval.closure = "left", zindex = NA, group = d.map, popup.vars = "d.map$pop.size", convert2density = TRUE, midpoint = NA )
+
+tmap_mode("plot")
+d.intermap.as
+
+
+####Hispanic Americans
+d.map$hispanic
+d.intermap.hs = tm_shape(d.map) + tm_fill("hispanic", id = "county", palette = "PuBuGn", legend.show = TRUE, legend.is.portrait = FALSE, legend.hist = FALSE, title = "Demographic: Hispanics, Per County", legend.hist.title = "Demographic: HIspanics, Per County",) + tm_polygons("PuBuGn", "White", style = "pretty", n = 4, alpha = 2, stretch.palette = TRUE, popup.format = list(),interval.closure = "left", zindex = NA, group = d.map, popup.vars = "d.map$pop.size", convert2density = TRUE, midpoint = NA )
+
+tmap_mode("view")
+d.intermap.hs
+
+##POVERTY 
+d.map$poverty
+
+d.intermap.pov = tm_shape(d.map) + tm_fill("poverty", id = "county", palette = "Blues", legend.show = TRUE, legend.is.portrait = FALSE, legend.hist = FALSE, title = "Demographic: Poverty Rates", legend.hist.title = "Demographic: Poverty, Per County",) + tm_polygons("Blues", "White", style = "pretty", n = 4, alpha = 2, stretch.palette = TRUE, popup.format = list(),interval.closure = "left", zindex = NA, group = d.map, popup.vars = "d.map$pop.size", convert2density = TRUE, midpoint = NA )
+tmap_mode("plot")
+
+d.intermap.pov
+
+############DF_BAR AT RISK VISUALIZATIONS
+
+counties
+class(DF_Bar)
+DF.bar = DF_Bar[,c('CHSI_State_Name','CHSI_County_Name','Unemployed',"Sev_Work_Disabled","Recent_Drug_Use","No_Exercise","Obesity","High_Blood_Pres","Smoker","Diabetes",
+                                  "Uninsured","Elderly_Medicare","Disabled_Medicare")]
+
+DF.bar$state = tolower(DF.bar$CHSI_State_Name)
+DF.bar$county = tolower(DF.bar$CHSI_County_Name)
+DF.bar$ID = paste(DF.bar$state, DF.bar$county, sep = ',')
+
+vuln.map = left_join(counties, DF.bar)  
+  
+###Vulnerable Population Rates USofA UnEmployed
+vuln.map$Unemployed
+v.intermap.ue = tm_shape(vuln.map) + tm_fill("Unemployed", id = "county", palette = "GnBu", legend.show = TRUE, legend.is.portrait = FALSE, legend.hist = FALSE, title = "Vulnerable Populations:Unemployment Rates", legend.hist.title = "Unemployment Rates",) + tm_polygons("GnBu", "White", style = "pretty", n = 4, alpha = 2, stretch.palette = TRUE, popup.format = list(),interval.closure = "left", zindex = NA, group = d.map, popup.vars = "d.map$pop.size", convert2density = TRUE, midpoint = NA )
+tmap_mode("plot")
+
+v.intermap.ue
+######### Vulnerable Population Rates of Sev Work Disabled
+vuln.map$Sev_Work_Disabled
+
+v.intermap.swd = tm_shape(vuln.map) + tm_fill("Sev_Work_Disabled", id = "county", palette = "BuGn", legend.show = TRUE, legend.is.portrait = FALSE, legend.hist = FALSE, title = "Vulnerable Populations:Severely Disabled Rates", legend.hist.title = "Severely Disabled Rates",) + tm_polygons("PiYG", "White", style = "pretty", n = 4, alpha = 2, stretch.palette = TRUE, popup.format = list(),interval.closure = "left", zindex = NA, group = d.map, popup.vars = "d.map$pop.size", convert2density = TRUE, midpoint = NA )
+tmap_mode("plot")
+
+v.intermap.swd
+  
+
+
+
+
+
+#=================================================
+
+ale.mMap = tm_shape(ale.Map) + tm_fill("ALE", legend.show = TRUE,legend.is.portrait = FALSE, legend.hist	= FALSE,legend.hist.title = "ALE UNITED STATES",
+                                       id = "county", palette = "Greens")  +  tm_polygons("county", "orange", style = "cont",  n = 2, alpha = 1 , stretch.palette = TRUE, popup.vars = NA, convert2density = FALSE, midpoint = FALSE)
+tmap_mode("view")
+ale.mMap
+
+
+
+
+
+
+
+
+
+
+
+
+##################################
+# ALE
+##################################
+View(Ale.Contribs.df)
+class(BarPlotDeath)
+ale.1 <- Ale.Contribs.df[,c('CHSI_State_Name','CHSI_County_Name','County_FIPS_Code','No_HS_Diploma', 'Population_Size','ALE')] 
+ale.1$state <- tolower(ale.1$CHSI_State_Name)
+ale.1$county<- tolower(ale.1$CHSI_County_Name)
+ale.1$ID <- paste(ale.1$state,ale.1$county,sep=',')
+
+counties <- st_as_sf(map("county", plot=FALSE, fill=TRUE))
+
+#create new object that combines the counties sf with the ALE dataset
+ale.Map  <- left_join(counties,ale.1)
+plot(ale.Map)
+
+
+ale.mMap = tm_shape(ale.Map) + tm_fill("ALE", legend.show = TRUE,legend.is.portrait = FALSE, legend.hist	= TRUE,legend.hist.title = "ALE UNITED STATES",
+                                       id = "county", palette = "Greens")  +  tm_polygons("county", "orange", style = "cont",  n = 2, alpha = 1 , stretch.palette = TRUE, popup.vars = NA, convert2density = FALSE, midpoint = FALSE)
+tmap_mode("view")
+ale.mMap
+```
+# Data Models
+
+## Linear regression
+A linear model was built using variables like Age, Demographics, Drug Usage, Use of Toxic Chem, No Exercise, Fruit intake, Blood Pressure, Diabetes and an R-squared value of 71.2% was obtained that explained the variability on Average life expectancy in a county.
+* Etnicity does not impact ALE much but it is seen that impact of longer ALE is in the order of Native American, White, Hispanic, Black and Asian*
+* It is seen that as the number of people having HIV, Cancer, Diabetes, Heart Disease increases ALE decreases.The order of negative impact on ALE is Heart disease, Smoking, Diabetes, BP, Obesity, HIV
+* It is seen that as the number of people having HIV, Cancer, Diabetes, Heart Disease increases ALE decreases. The order of negative impact on ALE is Heart disease, Smoking, Diabetes, BP, Obesity, HIV
+* A strong relationship is seen between Unemployed, Drug Usage and Uninsured
+Being Uninsured has a strong relationship with unemployment, drug usage, receiving elderly Medicare, and disabled Medicare
+* Diabetes is having a moderate to strong relationship with obesity, No-exercise, Blood Pressure
+* Major Depression and Drug Use are very strongly related
+It is noticed that less Fruit intake is moderately related to no-exercise and obesity
+
+## Linear Regression Plots
+1.  Residual vs. Fitter Plot - We see there is no specific pattern in the residuals predicted by our model so we can eliminate the possibility of heteroskedasticity and also possible outliers. 
+2.  QQ Plot - Though most of the points seem to fall on the line which indicates that our residuals come from a normal distribution, there are some points that stray from the line in the lower and upper quantiles of the plot. It is possible that these points do not come from a normal distribution, but most of our points seem to come from a normal distribution so there is not a lot to worry about here.
+3.  Leverage Plot- This plot graphs the standardized residuals against their leverage. It also includes the Cook’s distance boundaries. Any point outside of those boundaries would be an outlier in the x direction. Since we cannot even see the boundaries on our plot, we can conclude that we have no outliers.
+
+```{r linear, include=TRUE}
+mean_clean$HIV <- mean_clean$D_Hi_HIV+mean_clean$D_Bl_HIV+mean_clean$D_Hi_HIV
+mean_clean$E_Cancer <- mean_clean$E_Wh_Cancer + mean_clean$E_Bl_Cancer + mean_clean$E_Ot_Cancer + mean_clean$E_Hi_Cancer
+mean_clean$E_HeartDis <- mean_clean$E_Wh_HeartDis + mean_clean$E_Bl_HeartDis + mean_clean$E_Ot_HeartDis + mean_clean$E_Hi_HeartDis
+mean_clean$F_HeartDis <- mean_clean$F_Wh_HeartDis + mean_clean$F_Bl_HeartDis + mean_clean$F_Ot_HeartDis + mean_clean$F_Hi_HeartDis
+mean_clean$F_Cancer <- mean_clean$F_Wh_Cancer + mean_clean$F_Bl_Cancer + mean_clean$F_Ot_Cancer + mean_clean$F_Hi_Cancer
+ndf_lr <- mean_clean[,c('Poverty','Age_19_Under','Age_19_64','Age_65_84','Age_85_and_Over','White','Black','Native_American','Asian','Hispanic','Recent_Drug_Use','Toxic_Chem','No_Exercise','Few_Fruit_Veg','Obesity','High_Blood_Pres','Smoker','Diabetes','HIV','E_HeartDis','F_HeartDis','ALE')]
+
+linear_ndf <- lm(ALE~.,ndf_lr)
+summary(linear_ndf)$r.squared 
+linear_ndf$coefficients
+plot(linear_ndf)
+```
+# Kmeans
+
+```{r kmeans, include=TRUE}
+#Randall     
+#kMeans
+#load in data 
+packages <- c("NbClust","ggmap","pvclust","tidyverse","reshape2","flexclust", "dplyr","openxlsx","factoextra","readxl","ggplot2","maps","corrplot","Rcmdr","neuralnet","dplyr","e1071","kernlab") 
+              
+ package.check <- lapply(packages, FUN = function(x) {
+                if (!require(x, character.only = TRUE)) {
+                  install.packages(x, dependencies = TRUE)
+                  library(x, character.only = TRUE)
+                }
+              })
+
+ #a copy of the function
+ lower.df = function(v) 
+ {
+   if(is.character(v)) return(tolower(v)) 
+   else return(v)
+ }
+ 
+ 
+setwd("C:/Users/TAYLOR2/Desktop/workingdirectory/finalproject")
+testData = read_xlsx("mc1.xlsx")
+#View(testData)
+
+
+
+vuln = subset(testData, select = 
+                   c(Population_Size, Population_Density,Poverty, No_HS_Diploma,Unemployed,Sev_Work_Disabled,Major_Depression,Recent_Drug_Use,No_Exercise,Few_Fruit_Veg,Obesity,
+                     High_Blood_Pres,Smoker,Diabetes,Uninsured,Elderly_Medicare,Disabled_Medicare,ALE))
+
+
+
+vuln$Population_Size = vuln$Population_Size/vuln$Population_Size*100
+vuln$Poverty = vuln$Poverty/vuln$Population_Size*100
+vuln$No_HS_Diploma = vuln$No_HS_Diploma/vuln$Population_Size*100
+vuln$Unemployed = vuln$Unemployed/vuln$Population_Size*100
+vuln$Sev_Work_Disabled = vuln$Sev_Work_Disabled/vuln$Population_Size*100
+vuln$Major_Depression =  vuln$Major_Depression/vuln$Population_Size*100
+vuln$Recent_Drug_Use = vuln$Recent_Drug_Use/vuln$Population_Size*100
+vuln$No_Exercise = vuln$No_Exercise/vuln$Population_Size*100
+vuln$Few_Fruit_Veg = vuln$Few_Fruit_Veg/vuln$Population_Size*100
+vuln$Obesity = vuln$Obesity/vuln$Population_Size*100
+vuln$High_Blood_Pres = vuln$High_Blood_Pres/vuln$Population_Size*100
+vuln$Smoker = vuln$Smoker/vuln$Population_Size*100
+vuln$Diabetes = vuln$Diabetes/vuln$Population_Size*100
+vuln$Uninsured = vuln$Uninsured/vuln$Population_Size*100
+vuln$Elderly_Medicare = vuln$Elderly_Medicare/vuln$Population_Size*100
+vuln$Disabled_Medicare = vuln$Disabled_Medicare/vuln$Population_Size*100
+vuln$ALE = vuln$ALE/vuln$Population_Size*100
+
+
+###using the Rcmdr package, convert to correlations matrix
+
+library(survival, pos=63)
+library(Formula, pos=63)
+library(Hmisc, pos=63)
+vuln_Cor =rcorr.adjust(vuln[,c("ALE","Diabetes","Disabled_Medicare",
+                     "Elderly_Medicare","Few_Fruit_Veg","High_Blood_Pres","Major_Depression",
+                     "No_Exercise","No_HS_Diploma","Obesity","Population_Density",
+                     "Poverty","Recent_Drug_Use","Sev_Work_Disabled","Smoker",
+                     "Unemployed","Uninsured")], type="pearson", use="complete")
+
+
+
+
+vuln_Cor
+#Establish a correlation between variables selected; we need to establish that there are correlating factors between the selected variables;
+#establishing a correlations plot on the potential highest correlating factors is a prduent first step in the descriptive statitistics 
+
+
+
+vuln_Cor1 = cor(vuln[,c("ALE","Diabetes","Disabled_Medicare",
+                          "Elderly_Medicare","Few_Fruit_Veg","High_Blood_Pres","Major_Depression",
+                          "No_Exercise","No_HS_Diploma","Obesity","Population_Density",
+                          "Poverty","Recent_Drug_Use","Sev_Work_Disabled","Smoker",
+                          "Unemployed","Uninsured")],  use="complete")
+
+
+
+vuln_Cor2 = corrplot::corrplot(vuln_Cor1, method = ('pie'), type = ('upper'), add = F, col = NULL, bg = "white", title = "ALE correlating risk factors",
+          is.corr= T, diag = T, outline = T, addgrid.col = T,addCoef.col = NULL,addCoefasPercent = T, 
+          sig.level = 0.05 )
+
+corrplot(vuln_Cor2)
+
+
+
+#Perhaps a linear regression of specific 'explortory target variables,' to test predicability of those variables is in order, 
+#then attempt to find clustering 
+
+
+
+LinReg_Vuln = lm(ALE~Diabetes+Disabled_Medicare+Elderly_Medicare+Few_Fruit_Veg+High_Blood_Pres
+                 +Major_Depression+No_Exercise+No_HS_Diploma+Obesity+Population_Density+
+                   Poverty+ Recent_Drug_Use+ Sev_Work_Disabled + Smoker + Unemployed + Uninsured,
+     data=vuln)
+
+LinReg_Vuln
+summary(LinReg_Vuln)
+
+#boxplot showing Life Expectancy 
+LinReg_VulnSPLOT = ggplot(data=LinReg_Vuln,aes(x='Life expectancy',y=ALE)) + geom_boxplot()  
+LinReg_VulnSPLOT
+
+
+# Create the model
+
+#1. 
+ale_Diabetes= ggplot(vuln, aes(ALE, Diabetes))+
+                  geom_point() +
+  # Add the line using the fortified fit data, plotting the x vs. the fitted values
+           geom_line(data = fortify(vuln), aes(x = ALE,
+                                               y = Diabetes))
+ale_Diabetes
+#2
+ale_Disabled_Medicare = ggplot(vuln, aes(ALE, Disabled_Medicare))+
+  geom_point() +
+# Add the line using the fortified fit data, plotting the x vs. the fitted values
+geom_line(data = fortify(vuln), aes(x = ALE,
+                                    y = Disabled_Medicare))
+ale_Disabled_Medicare
+#3
+ale_Elderly_Medicare = ggplot(vuln, aes(ALE, Elderly_Medicare))+
+  geom_point() +
+# Add the line using the fortified fit data, plotting the x vs. the fitted values
+geom_line(data = fortify(vuln), aes(x = ALE,
+                                    y = Elderly_Medicare))
+ale_Elderly_Medicare
+#4
+ale_Few_Fruit_Veg = ggplot(vuln, aes(ALE, Elderly_Medicare))+
+  geom_point() +
+# Add the line using the fortified fit data, plotting the x vs. the fitted values
+geom_line(data = fortify(vuln), aes(x = ALE,
+                                    y = Elderly_Medicare))
+ale_Few_Fruit_Veg
+
+   #        ++Few_Fruit_Veg+High_Blood_Pres
+    #       +Major_Depression+No_Exercise+No_HS_Diploma+Obesity+Population_Density+
+     #        Poverty+ Recent_Drug_Use+ Sev_Work_Disabled + Smoker + Unemployed + Uninsured,           
+
+
+#create a clusterable dataframe 
+
+# subset data to only include some columns
+atRisk <- subset(testData, select = 
+                         c(CHSI_County_Name, CHSI_State_Name,CHSI_State_Abbr, Population_Size, Population_Density,
+                           Poverty, No_HS_Diploma,Unemployed,Sev_Work_Disabled,Major_Depression,Recent_Drug_Use,No_Exercise,Few_Fruit_Veg,Obesity,
+                           High_Blood_Pres,Smoker,Diabetes,Uninsured,Elderly_Medicare,Disabled_Medicare,ALE))
+
+
+# clean names of the subset
+nms_atRisk_dat <- c("county.name","state.name","state.abbr","pop.size","pop.density",
+                  "poverty","no.hs.diploma","unemployed","sev.work.disabled","major.depression",
+                  "recent.drug.user","no.exercise","few.fruit.veg","obesity","high.blood.pres","smoker","diabetes","uninsured","elderly.medicare","disabled.medicare","ale")
+# change col names
+names(atRisk)=nms_atRisk_dat
+head(atRisk)
+
+
+#the dataframe is too large, try something small 
+
+atRisk1 = subset(atRisk, select = c("county.name","no.hs.diploma","ale"))
+atRisk2 = subset(atRisk, select = c("county.name","poverty","ale")) 
+atRisk3 = subset(atRisk, select = c("county.name","unemployed","ale"))
+atRisk4 = subset(atRisk, select = c("county.name","sev.work.disabled","ale"))
+atRisk5 = subset(atRisk, select = c("county.name","major.depression","ale"))
+atRisk6 = subset(atRisk, select = c("county.name","recent.drug.user","ale"))
+atRisk7 = subset(atRisk, select = c("county.name","no.exercise","ale"))
+atRisk8 = subset(atRisk, select = c("county.name","few.fruit.veg","ale"))
+atRisk9 = subset(atRisk, select = c("county.name","obesity","ale"))
+atRisk10 = subset(atRisk, select = c("county.name","high.blood.pres","ale"))
+atRisk11 = subset(atRisk, select = c("county.name","smoker","ale"))
+atRisk12 = subset(atRisk, select = c("county.name","diabetes","ale"))
+atRisk13 = subset(atRisk, select = c("county.name","uninsured","ale"))
+atRisk14 = subset(atRisk, select = c("county.name","elderly.medicare","ale"))
+atRisk15 = subset(atRisk, select = c("county.name","disabled.medicare","ale"))
+#PART II Final Clustering: Chosen = Diabetes,   , No Exercise, Obesity, Poverty, Smoker
+# Create Clustering: Map 
+atRiskFinal = subset(atRisk, select = c("county.name","state.name","diabetes","no.exercise","obesity","poverty","smoker","ale"))
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+#atRISK GROUP 1 
+View(atRisk1)
+set.seed(20)
+data.matrix(atRisk1)
+View(Test1)
+Test1 = scale(na.omit(data.matrix(atRisk1)[-1]))
+#head(Test1)
+wssplot = function(Test1, nc=20, seed=123){
+  wss = (nrow(Test1)-1)*sum(apply(Test1, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test1, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test1, nc=20)
+########Needed Libraries for large data set 
+#library(bigmemory)
+#library(biganalytics)
+library(VIM)
+memory.limit()
+memory.limit(size=16000)
+####
+#ensure we have no empty or NA values 
+aggr(Test1
+     )
+#optimization plots for 3 methods; based upon the NbClust packages
+#No High School Diploma, Average Life Expectancy 
+#1 SS No High School Diploma, Average Life Expectancy 
+fviz_nbclust(Test1, kmeans, method = "wss") + geom_vline(xintercept = 4, linetype = 2) + 
+  labs(subtitle = "withininSS No High School Diploma, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test1, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: No High School Diploma, Average Life Expectancy")
+#3 Silhouette method: No High School DIploma, Average Life Expectancy
+fviz_nbclust(Test1, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: No High School DIploma, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+clusters = kmeans(atRisk[,7,20], 5)
+
+## cross tabulation: state - cluster
+kClusterTable = table(atRisk$state.abbr, clusters$cluster)
+#kClusterTable
+#atRisk$ale
+## visualize cross tabulation
+melted_kmeans = melt(kClusterTable)
+ggplot(data = melted_kmeans, aes(x=Var2, y=Var1, fill = value )) +
+    geom_tile() +
+  labs(x = 'Cluster', y = 'State', title = 'State Clusters: No High School Diploma')
+
+ggsave(
+  'kmeans_em.png',
+  width = 16,
+  height = 9,
+  dpi = 100
+)
+
+
+## kmeans summary
+sink('kmeans_analysis.txt')
+kClusterTable
+cat('\n\n')
+cat('===========================================================\n')
+cat(' randIndex: measure between author, and cluster partitions.\n')
+cat('\n')
+cat(' Note: values vary between -1 to 1\n')
+cat('===========================================================\n')
+randIndex(kClusterTable)
+sink()
+
+#append the new clusters data in a new column
+
+atRisk$clusters = as.factor(clusters$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk.csv")
+
+
+#size = pop.size
+#plot(atRisk$clusters)
+library(ggplot2)
+
+noHScluster = ggplot(data=atRisk, aes(x=clusters, y=state.name, size = pop.size, label = clusters),guide=T)+
+  geom_point(color="white", fill="red", shape=21)+ scale_size_area(max_size = 10)+
+  scale_shape_ordinal(name="Cluster Assignments: No High School Diploma", limits=c(0,12))+
+  #scale_shape_identity(name="Burglaries per 1,000 population", limits=c(0,1250))+ 
+geom_text(size=2.5)+ theme_bw()
+plot(noHScluster)
+ggsave(
+  'noHScluster.pdf',
+  width = 16,
+  height = 9,
+  dpi = 100
+)
+
+# save api key
+register_google(key = "AIzaSyD-C0OMHmU2duAzSoCO001AmvjSP9jDVPU")
+
+# check if key is saved
+has_google_key()
+
+#register_google(key = "[C0OMHmU2duAzSoCO001AmvjSP9jDVPU]", write = TRUE)
+#getOption("ggmap")
+
+####Part II Viz on Map
+
+
+library(ggmap)
+#geocode(c("White House", "Uluru"))
+
+
+
+
+locations_df = paste(atRisk$county.name,",",atRisk$state.abbr)
+locations_df = tibble(locations_df)
+
+#get the geodat long lat 
+locations_geo_df = geocode(locations_df$locations_df)
+
+df.map_locations = cbind(locations_df, locations_geo_df)
+###
+###The below needs to be written for each cluster set
+
+df.map_locations["no.hs.diploma"] = tibble(no.hs.diploma = c(atRisk$no.hs.diploma))
+df.map_locations["ale"] = tibble(ale = c(atRisk$ale))
+df.map_locations["clusters"] = tibble(clusters = c(atRisk$clusters))
+view(df.map_locations)
+str(df.map_locations)
+df.map_locations["size1"] = tibble(size1 = c(ifelse(df.map_locations$no.hs.diploma < 10000, 1, 2 )))
+df.map_locations["size2"] =  tibble(size2 = c(ifelse(df.map_locations$clusters < 2, "red", 
+                                                     ifelse(df.map_locations$clusters <3, "pink", 
+                                                     ifelse(df.map_locations$clusters <4, "blue",
+                                                    ifelse(df.map_locations$clusters <5, "purple",
+                                                           ifelse(df.map_locations$clusters <6, "green", 1)))))))
+write.xlsx(df.map_locations, "MapLocationClusters.xlsx")
+
+
+atRiskClustMap = read_xlsx("MapLocationClusters.xlsx")
+
+#Map cluster data in Google Maps
+No_HighSchool_Diploma =  df.map_locations$size1
+
+usMap = get_map("United States of America", maptype = "roadmap", zoom = 4)
+
+
+ggmap(usMap) + geom_point(aes(x = lon[], y = lat[], color = as.factor(clusters), maptype = 'terrain', size = No_HighSchool_Diploma ), data = df.map_locations) +
+  ggtitle("No High School Diploma Clustering")
+
+
+##################################################
+#
+#atRisk2 Poverty and Average Life Expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk2)
+
+Test2 = scale(na.omit(data.matrix(atRisk2)[-1]))
+#head(Test1)
+wssplot = function(Test2, nc=20, seed=123){
+  wss = (nrow(Test2)-1)*sum(apply(Test2, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test2, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test2, nc=20)
+########Needed Libraries for large data set 
+
+#library(VIM)
+#memory.limit()
+#memory.limit(size=1800)
+####
+
+#aggr(Test2)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#No High School Diploma, Average Life Expectancy 
+#1 SS No High School Diploma, Average Life Expectancy 
+fviz_nbclust(Test2, kmeans, method = "wss") + geom_vline(xintercept = 5, linetype = 2) + 
+  labs(subtitle = "withininSS Poverty, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test2, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: Poverty, Average Life Expectancy")
+#3 Silhouette method: Poverty, Average Life Expectancy
+fviz_nbclust(Test2, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: No High School DIploma, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+#Perform KMeans analysis then place it as a new column in the data: poverty is column 6 
+clusters2 = kmeans(atRisk[,6,20], 5)
+
+#append the new clusters data in a new column
+
+atRisk$clusters2 = as.factor(clusters2$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk2.csv")
+plot(atRisk$clusters2)
+
+#
+#
+#
+#
+#
+#
+#
+##
+##
+
+##
+
+
+######################################
+#
+#atRisk3 unemployement, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk3)
+
+Test3 = scale(na.omit(data.matrix(atRisk3)[-1]))
+#head(Test1)
+wssplot = function(Test3, nc=20, seed=123){
+  wss = (nrow(Test3)-1)*sum(apply(Test3, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test3, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test3, nc=20)
+
+#show that there is no missing data 
+aggr(Test3
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#Unemployment, Average Life Expectancy 
+#1 SS Unemployment, Average Life Expectancy 
+fviz_nbclust(Test3, kmeans, method = "wss") + geom_vline(xintercept = 4, linetype = 2) + 
+  labs(subtitle = "withininSS Unemployment, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test3, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: Unemployment, Average Life Expectancy")
+#3 Silhouette method: Unemployment, Average Life Expectancy
+fviz_nbclust(Test3, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: No High School DIploma, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+#Perform KMeans analysis then place it as a new column in the data 
+clusters3 = kmeans(atRisk[,8,20], 4)
+
+#append the new clusters data in a new column
+
+atRisk$clusters3 = as.factor(clusters3$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk3.csv")
+
+
+plot(atRisk$clusters3)
+
+#
+#
+#
+#
+#
+#
+#
+
+
+
+######################################
+#
+#atRisk4 sev.work.disabled, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk4)
+
+Test4 = scale(na.omit(data.matrix(atRisk4)[-1]))
+#head(Test1)
+wssplot = function(Test4, nc=20, seed=123){
+  wss = (nrow(Test4)-1)*sum(apply(Test4, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test4, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test4, nc=20)
+
+#show that there is no missing data 
+aggr(Test4
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#sev.work.disabled, Average Life Expectancy 
+#1 SS sev.work.disabled, Average Life Expectancy 
+fviz_nbclust(Test4, kmeans, method = "wss") + geom_vline(xintercept = 5, linetype = 2) + 
+  labs(subtitle = "withininSS sev.work.disabled, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test4, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: sev.work.disabled, Average Life Expectancy")
+#3 Silhouette method: sev.work.disabled, Average Life Expectancy
+fviz_nbclust(Test4, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: sev.work.disabled, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+#Perform KMeans analysis then place it as a new column in the data 
+clusters4 = kmeans(atRisk[,9,20], 5)
+
+#append the new clusters data in a new column
+
+atRisk$clusters4 = as.factor(clusters4$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk4.csv")
+
+
+plot(atRisk$clusters4)
+
+
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+##
+#
+#
+
+#
+######################################
+#
+#atRisk5 major.depression, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk5)
+
+Test5 = scale(na.omit(data.matrix(atRisk5)[-1]))
+#head(Test1)
+wssplot = function(Test5, nc=20, seed=123){
+  wss = (nrow(Test5)-1)*sum(apply(Test5, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test5, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test5, nc=20)
+
+#show that there is no missing data 
+aggr(Test5
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#major.depression, Average Life Expectancy 
+#1 SS major.depression, Average Life Expectancy 
+fviz_nbclust(Test5, kmeans, method = "wss") + geom_vline(xintercept = 6, linetype = 2) + 
+  labs(subtitle = "withininSS major.depression, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test5, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: major.depression, Average Life Expectancy")
+#3 Silhouette method: major.depression, Average Life Expectancy
+fviz_nbclust(Test5, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: major.depression, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+#Perform KMeans analysis then place it as a new column in the data 
+clusters5 = kmeans(atRisk[,10,20], 6)
+
+#append the new clusters data in a new column
+
+atRisk$clusters5 = as.factor(clusters5$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk5.csv")
+
+
+plot(atRisk$clusters5)
+
+
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+##
+#recent.drug.user
+#
+######################################
+#
+#atRisk6 recent.drug.user, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk6)
+
+Test6 = scale(na.omit(data.matrix(atRisk6)[-1]))
+#head(Test1)
+wssplot = function(Test6, nc=20, seed=123){
+  wss = (nrow(Test6)-1)*sum(apply(Test6, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test6, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test6, nc=20)
+
+#show that there is no missing data 
+aggr(Test6
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#Unemployment, Average Life Expectancy 
+#1 SS Unemployment, Average Life Expectancy 
+fviz_nbclust(Test6, kmeans, method = "wss") + geom_vline(xintercept = 7, linetype = 2) + 
+  labs(subtitle = "withininSS Unemployment, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test6, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: Unemployment, Average Life Expectancy")
+#3 Silhouette method: Unemployment, Average Life Expectancy
+fviz_nbclust(Test6, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: Recent Drug User, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+#Perform KMeans analysis then place it as a new column in the data 
+clusters6 = kmeans(atRisk[,11,20],6)
+
+#append the new clusters data in a new column
+
+atRisk$clusters6 = as.factor(clusters6$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk6.csv")
+
+
+plot(atRisk$clusters6)
+
+#
+#
+#
+#
+#
+##
+
+#
+#
+#
+##
+
+
+
+######################################
+#
+#atRisk7 no.exercise, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk7)
+
+Test7 = scale(na.omit(data.matrix(atRisk7)[-1]))
+#head(Test1)
+wssplot = function(Test7, nc=20, seed=123){
+  wss = (nrow(Test7)-1)*sum(apply(Test7, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test7, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test7, nc=20)
+
+#show that there is no missing data 
+aggr(Test7
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#no excercise, Average Life Expectancy 
+#1 SS no excercise, Average Life Expectancy 
+fviz_nbclust(Test7, kmeans, method = "wss") + geom_vline(xintercept = 5, linetype = 2) + 
+  labs(subtitle = "withininSS no excercise, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test7, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: no excercise, Average Life Expectancy")
+#3 Silhouette method: no excercise, Average Life Expectancy
+fviz_nbclust(Test7, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: No excercise, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+
+#Perform KMeans analysis then place it as a new column in the data 
+clusters7 = kmeans(atRisk[,12,20], 4)
+
+#append the new clusters data in a new column
+
+atRisk$clusters7 = as.factor(clusters7$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk7.csv")
+
+
+plot(atRisk$clusters7)
+
+
+
+
+#
+#
+#
+#
+#
+#
+#
+##
+
+##
+#
+#
+#
+#
+######################################
+#
+#atRisk8 few.fruit.veg, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk8)
+
+Test8 = scale(na.omit(data.matrix(atRisk8)[-1]))
+#head(Test1)
+wssplot = function(Test8, nc=20, seed=123){
+  wss = (nrow(Test8)-1)*sum(apply(Test8, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test8, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test8, nc=20)
+
+#show that there is no missing data 
+aggr(Test8
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#few.fruit.veg, Average Life Expectancy 
+#1 SS few.fruit.veg, Average Life Expectancy 
+fviz_nbclust(Test8, kmeans, method = "wss") + geom_vline(xintercept = 7, linetype = 2) + 
+  labs(subtitle = "withininSS few.fruit.veg, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test8, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: few.fruit.veg, Average Life Expectancy")
+#3 Silhouette method: few.fruit.veg, Average Life Expectancy
+fviz_nbclust(Test8, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: few.fruit.veg, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+#Perform KMeans analysis then place it as a new column in the data 
+clusters8 = kmeans(atRisk[,13,20], 8)
+
+#append the new clusters data in a new column
+
+atRisk$cluster8 = as.factor(clusters8$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk8.csv")
+
+
+plot(atRisk$cluster8)
+
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+##
+#
+#
+#
+#
+#
+
+
+######################################
+#
+#atRisk9 obesity, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk9)
+
+Test9 = scale(na.omit(data.matrix(atRisk9)[-1]))
+#head(Test1)
+wssplot = function(Test9, nc=20, seed=123){
+  wss = (nrow(Test9)-1)*sum(apply(Test9, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test9, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test9, nc=20)
+
+#show that there is no missing data 
+aggr(Test9
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#obesity, Average Life Expectancy 
+#1 SS obesity, Average Life Expectancy 
+fviz_nbclust(Test9, kmeans, method = "wss") + geom_vline(xintercept = 5, linetype = 2) + 
+  labs(subtitle = "withininSS obesity, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test9, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: obesity, Average Life Expectancy")
+#3 Silhouette method: obesity, Average Life Expectancy
+fviz_nbclust(Test9, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: obesity, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+#Perform KMeans analysis then place it as a new column in the data 
+clusters9 = kmeans(atRisk[,14,20], 5)
+
+#append the new clusters data in a new column
+
+atRisk$cluster9 = as.factor(clusters9$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk9.csv")
+
+
+plot(atRisk$cluster9)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+##
+#
+#
+#
+###
+#
+######################################
+#
+#atRisk10 high.blood.pres, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk10)
+
+Test10 = scale(na.omit(data.matrix(atRisk10)[-1]))
+#head(Test1)
+wssplot = function(Test10, nc=20, seed=123){
+  wss = (nrow(Test10)-1)*sum(apply(Test10, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test10, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test10, nc=20)
+
+#show that there is no missing data 
+aggr(Test10
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#high.blood.pres, Average Life Expectancy 
+#1 SS high.blood.pres, Average Life Expectancy 
+fviz_nbclust(Test10, kmeans, method = "wss") + geom_vline(xintercept = 5, linetype = 2) + 
+  labs(subtitle = "withininSS high.blood.pres, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test10, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: high.blood.pres, Average Life Expectancy")
+#3 Silhouette method: high.blood.pres, Average Life Expectancy
+fviz_nbclust(Test10, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: high blood pres, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+#Perform KMeans analysis then place it as a new column in the data 
+clusters10 = kmeans(atRisk[,15,20], 8)
+
+#append the new clusters data in a new column
+
+atRisk$cluster10 = as.factor(clusters10$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk10.csv")
+
+
+plot(atRisk$cluster10)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+##
+#
+#
+#
+###
+#
+
+######################################
+#
+#atRisk11 smoker, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk11)
+
+Test11 = scale(na.omit(data.matrix(atRisk11)[-1]))
+#head(Test1)
+wssplot = function(Test11, nc=20, seed=123){
+  wss = (nrow(Test11)-1)*sum(apply(Test11, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test11, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test11, nc=20)
+
+#show that there is no missing data 
+aggr(Test11
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#smoker, Average Life Expectancy 
+#1 SS smoker, Average Life Expectancy 
+fviz_nbclust(Test11, kmeans, method = "wss") + geom_vline(xintercept = 5, linetype = 2) + 
+  labs(subtitle = "withininSS Smoker, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test11, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: smoker, Average Life Expectancy")
+#3 Silhouette method: smoker, Average Life Expectancy
+fviz_nbclust(Test11, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: Smoker, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+#Perform KMeans analysis then place it as a new column in the data 
+clusters11 = kmeans(atRisk[,16,20], 6)
+
+#append the new clusters data in a new column
+
+atRisk$cluster11 = as.factor(clusters11$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk11.csv")
+
+
+plot(atRisk$cluster11)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+##
+#
+#
+#
+###
+#
+######################################
+#
+#atRisk12 diabetes, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk12)
+
+Test12 = scale(na.omit(data.matrix(atRisk12)[-1]))
+#head(Test1)
+wssplot = function(Test12, nc=20, seed=123){
+  wss = (nrow(Test12)-1)*sum(apply(Test12, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test12, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test12, nc=20)
+
+#show that there is no missing data 
+aggr(Test11
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#diabetes, Average Life Expectancy 
+#1 SS diabetes, Average Life Expectancy 
+fviz_nbclust(Test12, kmeans, method = "wss") + geom_vline(xintercept = 6, linetype = 2) + 
+  labs(subtitle = "withininSS diabetes, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test12, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: diabetes, Average Life Expectancy")
+#3 Silhouette method: diabetes, Average Life Expectancy
+fviz_nbclust(Test12, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: Diabetes, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+#Perform KMeans analysis then place it as a new column in the data 
+clusters12 = kmeans(atRisk[,17,20], 6)
+
+#append the new clusters data in a new column
+
+atRisk$cluster12 = as.factor(clusters12$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk12.csv")
+
+
+plot(atRisk$cluster12)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+##
+#
+#
+#
+###
+#
+######################################
+#
+#atRisk13 uninsured, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk13)
+
+Test13 = scale(na.omit(data.matrix(atRisk13)[-1]))
+
+#head(Test1)
+wssplot = function(Test13, nc=20, seed=123){
+  wss = (nrow(Test13)-1)*sum(apply(Test13, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test13, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test13, nc=20)
+
+#show that there is no missing data 
+aggr(Test13
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#uninsured, Average Life Expectancy 
+#1 SS uninsured, Average Life Expectancy 
+fviz_nbclust(Test13, kmeans, method = "wss") + geom_vline(xintercept = 7, linetype = 2) + 
+  labs(subtitle = "withininSS uninsured, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test13, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: uninsured, Average Life Expectancy")
+#3 Silhouette method: uninsured, Average Life Expectancy
+fviz_nbclust(Test13, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: Uninsured, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+#Perform KMeans analysis then place it as a new column in the data 
+clusters13 = kmeans(atRisk[,18,20], 40)
+
+#append the new clusters data in a new column
+
+atRisk$cluster13 = as.factor(clusters13$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk13.csv")
+
+
+plot(atRisk$cluster13)
+######################################
+#
+#atRisk14 elderly.medicare, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk14)
+
+Test14 = scale(na.omit(data.matrix(atRisk14)[-1]))
+#head(Test1)
+wssplot = function(Test14, nc=20, seed=123){
+  wss = (nrow(Test14)-1)*sum(apply(Test14, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test14, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test14, nc=20)
+
+#show that there is no missing data 
+aggr(Test14
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#elderly.medicare, Average Life Expectancy 
+#1 SS elderly.medicare, Average Life Expectancy 
+fviz_nbclust(Test14, kmeans, method = "wss") + geom_vline(xintercept = 4, linetype = 2) + 
+  labs(subtitle = "withininSS elderly medicare, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test14, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: elderly.medicare, Average Life Expectancy")
+#3 Silhouette method: elderly medicare, Average Life Expectancy
+fviz_nbclust(Test14, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: Elderly medicare, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+
+#Perform KMeans analysis then place it as a new column in the data 
+clusters14 = kmeans(atRisk[,19,20], 30)
+
+#append the new clusters data in a new column
+
+atRisk$cluster14 = as.factor(clusters14$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk14.csv")
+
+
+plot(atRisk$cluster14)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+##
+#
+#
+#
+###
+#
+
+######################################
+#
+#atRisk15 disabled.medicare, average life expectancy clustering 
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRisk15)
+
+Test15 = scale(na.omit(data.matrix(atRisk15)[-1]))
+#head(Test1)
+wssplot = function(Test15, nc=20, seed=123){
+  wss = (nrow(Test15)-1)*sum(apply(Test15, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(Test15, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(Test15, nc=20)
+
+#show that there is no missing data 
+aggr(Test15
+)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#disabled.medicare, Average Life Expectancy 
+#1 SS disabled.medicare, Average Life Expectancy 
+fviz_nbclust(Test15, kmeans, method = "wss") + geom_vline(xintercept = 4, linetype = 2) + 
+  labs(subtitle = "withininSS disabled.medicare, Average Life Expectancy")
+#2 Gap-stat Kmeans test
+fviz_nbclust(Test15, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: disabled.medicare, Average Life Expectancy")
+#3 Silhouette method: disabled.medicare, Average Life Expectancy
+fviz_nbclust(Test15, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: Disabled Medicare, Average Life Expectancy" )
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+
+#Perform KMeans analysis then place it as a new column in the data 
+clusters15 = kmeans(atRisk[,20,20], 40)
+
+#append the new clusters data in a new column
+
+atRisk$cluster15 = as.factor(clusters15$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRisk15.csv")
+
+
+plot(atRisk$cluster15)
+#
+#
+#
+#
+#
+#
+#
+
+
+
+
+######################################################################################################################
+
+
+#PART II Final Clustering: Chosen = Diabetes, High Blood Pressure, No Exercise, Obesity, Poverty, Smoker
+# Create Clustering: Map 
+
+
+
+#########################
+#Part 1 Determine optimal number of clusters
+#############################################
+
+set.seed(20)
+data.matrix(atRiskFinal)
+
+TestFinal = scale(na.omit(data.matrix(atRiskFinal)[-1]))
+#head(Test1)
+wssplot = function(TestFinal, nc=20, seed=123){
+  wss = (nrow(TestFinal)-1)*sum(apply(TestFinal, 2, var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] = sum(kmeans(TestFinal, centers = i)$withinss)}
+  plot(1:nc, wss, type='b', xlab='Number of Clusters', ylab = "within groups sum of squares")}
+#View(Test1)
+#Original within sum squares plot VALIDATION 1 
+wssplot(TestFinal, nc=20)
+
+#show that there is no missing data 
+aggr(TestFinal
+)
+
+memory.limit()
+memory.size(max = T
+            )
+memory.limit(size = 11538.25)
+
+#optimization plots for 3 methods; based upon the NbClust packages
+#AtRisk factors, Average Life Expectancy 
+#1 SSAtRisk factors, Average Life Expectancy 
+fviz_nbclust(TestFinal, kmeans, method = "wss") + geom_vline(xintercept = 5, linetype = 2) + 
+  labs(subtitle = "withininSS AtRisk factors, Average Life Expectancy")
+#rattle()
+
+#2 Gap-stat Kmeans test
+fviz_nbclust(TestFinal, kmeans, algorithm="Lloyd", nstart = 20, method = "gap_stat", nboot = 50) +
+  labs(subtitle = "Gap-Stat: AtRisk factors, Average Life Expectancy")
+#3 Silhouette method: AtRisk factors, Average Life Expectancy
+fviz_nbclust(TestFinal, kmeans, method = "silhouette")+ labs(subtitle ="Silhouette method: AtRisk factors, Average Life Expectancy" )
+
+View(atRisk)
+
+library(rattle)
+library(RGtk2)
+rattle()
+
+
+
+
+#################################################################
+#
+#Part 2 - Perform the KMeans analysis
+#################################################################
+#atRiskFinal = subset(atRisk, select = c("county.name","state.name","diabetes","no.exercise","obesity","poverty","smoker","ale"))
+#[6,12,14,16,17,20]
+#atRisk$
+#View(atRisk[,6,12,14,16,17,20],5)
+#finalcluster.df = atRisk[6,12,14,16,17,20]
+#[,6,12,14,16,17,20]
+clustersFinal = kmeans(atRisk[,6,17],5)
+
+## cross tabulation: state - cluster
+kClusterTableFinal = table(atRisk$state.abbr, clustersFinal$cluster)
+#kClusterTable
+#atRisk$ale
+melted_kmeans$Var.2
+## visualize cross tabulation
+melted_kmeans$Var.1
+melted_kmeans = melt(kClusterTableFinal)
+ggplot(data = melted_kmeans, aes(x=Var.2, y=Var.1, fill = value )) +
+  geom_tile() +
+  labs(x = 'Cluster', y = 'State', title = 'At Risk k-means clusters')
+
+ggsave(
+  'kmeans_final.png',
+  width = 16,
+  height = 9,
+  dpi = 100
+)
+
+#distance measure visualization 
+distance <- get_dist(kClusterTableFinal)
+fviz_dist(distance, gradien t = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
+
+## kmeans summary
+sink('kmeans_analysis.txt')
+kClusterTableFinal
+cat('\n\n')
+cat('===========================================================\n')
+cat(' randIndex: measure between author, and cluster partitions.\n')
+cat('\n')
+cat(' Note: values vary between -1 to 1\n')
+cat('===========================================================\n')
+randIndex(kClusterTableFinal)
+sink()
+
+#append the new clusters data in a new column
+
+atRisk$FinalCluster = as.factor(clustersFinal$cluster)
+
+#write the clusters to the column; save the data findings as a CSV
+
+write_csv(atRisk,"atRiskFinal.csv")
+
+
+#size = pop.size
+#plot(
+atRisk$FinalCluster
+library(ggplot2)
+
+finalcluster = ggplot(data=atRisk, aes(x=FinalCluster, y=state.name, size = pop.size, label = FinalCluster),guide=T)+
+  geom_point(color="white", fill="red", shape=21)+ scale_size_area(max_size = 10)+
+  scale_shape_ordinal(name="Cluster Assignments: No High School Diploma", limits=c(0,12))+
+  #scale_shape_identity(name="Burglaries per 1,000 population", limits=c(0,1250))+ 
+  geom_text(size=2.5)+ theme_bw()
+plot(finalcluster)
+ggsave(
+  'finalcluster.pdf',
+  width = 16,
+  height = 9,
+  dpi = 100
+)
+
+# save api key
+register_google(key = "AIzaSyD-C0OMHmU2duAzSoCO001AmvjSP9jDVPU")
+
+# check if key is saved
+has_google_key()
+
+#register_google(key = "[C0OMHmU2duAzSoCO001AmvjSP9jDVPU]", write = TRUE)
+#getOption("ggmap")
+
+####Part II Viz on Map
+
+
+library(ggmap)
+locations_df = paste(atRisk$county.name,",",atRisk$state.abbr)
+locations_df = tibble(locations_df)
+
+#get the geodat long lat 
+locations_geo_df = geocode(locations_df$locations_df)
+
+df.map_locations = cbind(locations_df, locations_geo_df)
+###
+###The below needs to be written for each cluster set
+
+df.map_locations["poverty"] = tibble(poverty = c(atRisk$poverty))
+df.map_locations["diabetes"] = tibble(diabetes = c(atRisk$diabetes))
+df.map_locations["finalcluster"] = tibble(clusters = c(atRisk$FinalCluster))
+df.map_locations["pop.size"] = tibble(pop.size = c(atRisk$pop.size))
+view(df.map_locations)
+df.map_locations$size1
+str(df.map_locations)
+df.map_locations["size1"] = tibble(size1 = c(ifelse(df.map_locations$pop.size < 10000 , 2, 4 )))
+df.map_locations["size2"] =  tibble(size2 = c(ifelse(df.map_locations$finalcluster < 2, "red", 
+                                                     ifelse(df.map_locations$finalcluster < 3, "pink", 
+                                                            ifelse(df.map_locations$finalcluster <4, "blue",
+                                                                   ifelse(df.map_locations$finalcluster <5, "purple",
+
+
+                                                                    ifelse(df.map_locations$finalcluster <6, "green", 1)))))))
+write.xlsx(df.map_locations, "MapLocationClusters.xlsx")
+
+
+aRC  = read_xlsx("MapLocationClusters.xlsx")
+View(aRC)
+#Map cluster data in Google Maps
+FinalClustM =  df.map_locations$size2
+usMap = get_map("United States of America", maptype = "roadmap", zoom = 4)
+plot(usMap)
+View(FinalClustM)
+#maptype = 'roadmap',
+
+us = ggmap(usMap) + geom_point(aes(x = lon[], y = lat[], color = as.factor(finalcluster) , size = pop.size ), data = df.map_locations) +
+  ggtitle("CHSI Cluster Map")
+
+#NorthEast Clusters
+
+NEUSA = get_map("Newark, New Jersey", zoom = 6)
+
+east_coast = ggmap(NEUSA) + geom_point(aes(x = lon[], y = lat[], color = as.factor(finalcluster) , size = pop.size ), data = df.map_locations) +
+  ggtitle("CHSI Cluster Map, East Coast Clusters")
+
+plot(east_coast)
+
+
+#West Coast Clusters 
+
+WCUSA = get_map("Bakersfield, California", zoom = 6)
+
+west_coast = ggmap(WCUSA) + geom_point(aes(x = lon[], y = lat[], color = as.factor(finalcluster) , size = pop.size ), data = df.map_locations) +
+  ggtitle("CHSI Cluster Map, West Coast at Risk Clusters")
+plot(west_coast)
+
+#Central United States
+
+CUSA = get_map("Topeka, Kansas", zoom = 6)
+
+central_us = ggmap(CUSA) + geom_point(aes(x = lon[], y = lat[], color = as.factor(finalcluster) , size = pop.size ), data = df.map_locations) +
+  ggtitle("CHSI Cluster Map, Central United States at Risk Clusters")
+plot(central_us)
+  
+
+#Great Lakes Region, United States 
+
+
+GLUSA = get_map("Lansing, Michigan", zoom = 6)
+
+
+great_lakes_us = ggmap(GLUSA) + geom_point(aes(x = lon[], y = lat[], color = as.factor(finalcluster) , size = pop.size ), data = df.map_locations) +
+  ggtitle("CHSI Cluster Map, Great Lakes Region, United States at Risk Clusters")
+plot(great_lakes_us)
+
+#South Eastern United States 
+
+SEUSA = get_map("Atlanta, Georgia", zoom = 6)
+
+southeast_us = ggmap(SEUSA) + geom_point(aes(x = lon[], y = lat[], color = as.factor(finalcluster) , size = pop.size ), data = df.map_locations) +
+  ggtitle("CHSI Cluster Map, South East Region, United States at Risk Clusters")
+plot(southeast_us)
+
+#New York Region
+
+thecityUSA = get_map("New York City, New York ", zoom = 10)
+
+cityUSA = ggmap(thecityUSA) + geom_point(aes(x = lon[], y = lat[], color = as.factor(finalcluster) , size = pop.size ), data = df.map_locations) +
+  ggtitle("CHSI Cluster Map, New York City, Long Island, Northern New Jersey, United States at Risk Clusters")
+plot(cityUSA)
+
+```
+
+# svm model
+Linear and Polynomial kernal gave an error of 0.03% for a cost of 1 and 50. So we decided to go with a cost of 1 with the linear model.
+```{r svmresults, include=TRUE}
+# create a dataframe with required variables
+ndf <- mean_clean[,c('Poverty','Age_19_Under','Age_19_64','Age_65_84','Age_85_and_Over','White','Black','Native_American','Asian','Hispanic','Recent_Drug_Use','Toxic_Chem','No_Exercise','Few_Fruit_Veg','Obesity','High_Blood_Pres','Smoker','Diabetes','D_Wh_HIV','D_Bl_HIV','D_Hi_HIV','E_Wh_Cancer','E_Bl_Cancer','E_Ot_Cancer','E_Hi_Cancer','E_Wh_HeartDis','E_Bl_HeartDis','E_Ot_HeartDis','E_Hi_HeartDis','F_Wh_HeartDis','F_Bl_HeartDis','F_Ot_HeartDis','F_Hi_HeartDis','F_Wh_Cancer','F_Bl_Cancer','F_Ot_Cancer','F_Hi_Cancer','ALE')]
+
+file = "/Users/shilpaks/Documents/Syracuse_Graduation/Fall term 2019/Data Analytics/Project/chsi_dataset/meanClean.csv"
+write_csv(ndf,"/Users/shilpaks/Documents/Syracuse_Graduation/Fall term 2019/Data Analytics/Project/chsi_dataset/meanClean.csv")
+str(ndf)
+
+# svm- linear kernel, cost = 1
+library(e1071)
+testset1 <- ndf[1:1000,]
+trainset1 <- ndf[1001:3142,]
+svm1 <- svm(ALE ~., data = trainset1, kernel = "linear", type = "eps", cost=1)
+pred=predict(svm1, testset1[,-38], type=c("eps"))
+pred
+library(caret)
+conf <- data.frame(pred,testset1$ALE)
+sqrt((mean(conf$pred-conf$testset1.ALE)^2))
+plot(pred~testset1$ALE)
+plot(svm1,trainset1)
+
+# svm-linear, cost = 20
+testset1 <- ndf[1:1000,]
+trainset1 <- ndf[1001:3142,]
+svm1 <- svm(ALE ~., data = trainset1, kernel = "linear", type = "eps", cost = 20)
+pred=predict(svm1, testset1, type=c("eps"))
+library(caret)
+conf.linear <- data.frame(pred,testset1$ALE)
+sqrt((mean(conf.linear$pred-conf.linear$testset1.ALE)^2))
+
+# svm-polynomial, cost = 50-0.03
+testset1 <- ndf[1:1000,]
+trainset1 <- ndf[1001:3142,]
+svm1 <- svm(ALE ~., data = trainset1, kernel = "polynomial", type = "eps", cost = 50)
+pred=predict(svm1, testset1[,-38], type=c("eps"))
+library(caret)
+conf.polynomial <- data.frame(pred,testset1$ALE)
+sqrt((mean(conf.linear$pred-conf.linear$testset1.ALE)^2))
+
+# svm-polynomial, cost = 50- 0.039
+testset1 <- ndf[1:1000,]
+trainset1 <- ndf[1001:3142,]
+svm1 <- svm(ALE ~., data = trainset1, kernel = "radial", type = "eps", cost = 50)
+pred=predict(svm1, testset1[,-38], type=c("eps"))
+library(caret)
+conf.radial <- data.frame(pred,testset1$ALE)
+sqrt((mean(pred-testset1$ALE)^2))
+```
+
+# Decision Tree
+A decision tree model was built using different rpart paremeters like maxdepth and minsplit. A model with maxdepth of 7,minsplit of 200 yeilds the best result with least error of 8.2% and an accuracy of 91.8%
+```{r decisionTree, include=TRUE}
+#install.packages('rpart')
+#install.packages('rpart.plot')
+library(rpart)
+library(rpart.plot)
+set.seed(50)
+dt <- rpart(ALE~.,trainset1,method  = "anova", control = rpart.control(cp = 0, maxdepth = 7,minsplit = 200))
+rpart.plot(dt)
+pred_dt <- predict(dt, testset1[,-38])
+library(caret)
+conf.dt <- data.frame(pred,testset1$ALE)
+sqrt((mean(pred_dt-testset1$ALE)^2))
+
+```
+
+# Random Forest
+A random forest model was built using different number of trees 5,20,17. A model with 11 trees yeilded the best result with least error of 8.3% and an accuracy of 92%
+```{r randomForest, include=TRUE}
+#install.packages("randomForest")
+#install.packages("caret")
+library(randomForest)
+library(caret)
+set.seed(50)
+rfm_chsi <- randomForest(ALE~., data=trainset1, ntree=11, na.action=na.exclude)
+print(rfm_chsi)
+predRF <- predict(rfm_chsi, testset1[,-38])
+conf.RF <- data.frame(pred,testset1$ALE)
+sqrt((mean(predRF-testset1$ALE)^2))
+plot(pred,testset1$ALE, col='red', main="Random Forest")
+```
+
+#NaiveBayes
+```{r}
+###########
+## Naive Bayes 
+###########
+
+library(e1071)
+library(naivebayes)
+library(tidyr)
+library(devtools)
+library(rsample)
+library(dplyr)    
+library(ggplot2)  
+library(caret)    
+library(h2o)      
+
+
+atRiskFinal <- read.csv(file="c:/Users/Caitlin Casey/Desktop/atRiskFinal.csv", header=TRUE, sep=",")
+(head(atRiskFinal))
+(str(atRiskFinal))
+(nrow(atRiskFinal))
+
+# conver some numeric variables to factors
+atRiskFinal <- atRiskFinal %>%
+  mutate(
+    pop.size = as.numeric(pop.size),
+    pop.density = as.numeric(pop.density),
+    poverty = as.numeric(poverty),
+    no.hs.diploma = as.numeric(no.hs.diploma),
+    unemployed = as.numeric(unemployed),
+    sev.work.disabled = as.numeric(sev.work.disabled),
+    major.depression = as.numeric(major.depression),
+    recent.drug.user = as.numeric(recent.drug.user),
+    no.exercise = as.numeric(no.exercise),
+    few.fruit.veg = as.numeric(few.fruit.veg),
+    obesity = as.numeric(obesity),
+    high.blood.pres = as.numeric(high.blood.pres),
+    smoker = as.numeric(smoker),
+    diabetes = as.numeric(diabetes),
+    uninsured = as.numeric(uninsured),
+    elderly.medicare = as.numeric(elderly.medicare),
+    disabled.medicare = as.numeric(disabled.medicare)
+  )
+
+###########
+
+library(MASS)
+n <- nrow(atRiskFinal)
+shuffled_atRiskFinal <- atRiskFinal[sample(n), ]
+train_indices <- 1:round(0.7 * n)
+train <- shuffled_atRiskFinal[train_indices, ]
+test_indices <- (round(0.7 * n) + 1):n
+test <- shuffled_atRiskFinal[test_indices, ]
+
+# distribution of "ale" rates across train & test set
+table(train$ale) %>% prop.table()
+table(test$ale) %>% prop.table()
+
+train
+  gather(metric, value)
+  ggplot(aes(value, fill = metric)) + 
+  geom_density(show.legend = FALSE) + 
+  facet_wrap(~ metric, scales = "free")
+```
+#Confusion Matrix
+
+```{r}
+###########
+## Naive Bayes Confusion Matrix
+###########
+
+library(e1071)
+library(naivebayes)
+library(tidyr)
+library(devtools)
+library(rsample)
+library(dplyr)    
+library(ggplot2)  
+library(caret)    
+library(h2o)      
+
+
+###Implementing H2O pkg
+
+###Start package
+#"Error in h2o.init() : H2O failed to start, stopping execution."
+
+#Let's try caret then
+library(klaR)
+library(caret)
+library(ElemStatLearn)
+
+head(atRiskFinal)
+
+dim(atRiskFinal)
+index = sample(nrow(atRiskFinal), floor(nrow(atRiskFinal) * 0.7)) #70/30 split.
+train = atRiskFinal[index,]
+test = atRiskFinal[-index,]
+
+xTrain = train[,-21] # removing y-outcome variable.
+yTrain = train$atRiskFinal$ale
+
+xTest = test[,-21]
+yTest = test$atRiskFinal$ale
+
+Model = train(xTrain, yTrain,'nb',trControl=trainControl(method = 'cv',number=10))
+
+prop.table(table(predict(model$finalModel,xTest)$class,yTest)) 
+
+
+###>
+###RESULTS:
+### Model = train(xTrain, yTrain,'nb',trControl=trainControl(method = 'cv',number=10))
+###Error in train(xTrain, yTrain, "nb", trControl = trainControl(method = "cv",  
+###unused argument (trControl = trainControl(method = "cv", number = 10))
+###> prop.table(table(predict(model$finalModel,xTest)$class,yTest))
+###Error in UseMethod("predict") : 
+### no applicable method for 'predict' applied to an object of class "NULL"
+                                                              
+
+####TRY AGAIN
+#Getting started with Naive Bayes
+library(e1071)
+?naiveBayes 
+
+atRiskFinal <- read.csv(file = 'atRiskFinal.csv')
+#Save in a data frame
+atRiskFinal_DF=as.data.frame(atRiskFinal)
+View(atRiskFinal_DF)
+
+#Creating data
+repeating_sequence=rep.int(seq_len(nrow(atRiskFinal_DF)), atRiskFinal_DF$ale) 
+#This repeass each combo equal to the frequency of each combination
+#Create the dataset by row repetition created
+atRiskFinal=atRiskFinal_DF[repeating_sequence,]
+#We no longer need the frequency, drop the feature
+atRiskFinal$Freq=NULL
+
+#Fitting the Naive Bayes model
+Naive_Bayes_Model=naiveBayes(ale ~., data=atRiskFinal_DF)
+#What does the model say? Print the model summary
+Naive_Bayes_Model
+
+NB_Predictions=predict(Naive_Bayes_Model,atRiskFinal_DF)
+#Confusion matrix to check accuracy
+table(NB_Predictions,atRiskFinal_DF)
+
+
+#Naive Bayes in mlr
+#Install the package
+install.packages('mlr')
+#Loading the library
+library(mlr)
+
+atRiskFinal <- read.csv(atRiskFinal.csv)
+atRiskFinal$ale <- as.factor(atRiskFinal$ale)
+
+#Create a classification task
+task = makeClassifTask(data = atRiskFinal, target = "ale")
+
+#Initialize the Naive Bayes classifier
+selected_model = makeLearner("classif.naiveBayes")
+
+#Train model
+NB_mlr <- train(selected_model, task)
+
+#Read model
+NB_mlr$learner.model
+
+#Predict without passing the target feature
+predictions_mlr <- as.data.frame(predict(NB_mlr, newdata = atRiskFinal))
+
+##Confusion matrix
+table(predictions_mlr[,1],atRiskFinal$ale)
+
+
+#Assitance via https://www.r-bloggers.com/understanding-naive-bayes-classifier-using-r/
+
+```
+
+# Result
+Our objective was to find factors that impact ALE so that the findings will aid health agencies or government to assist population in those areas. To do this we derived many models to understand the important factors.
+Below is a summary of the models built to understand ALE and factors affecting it
+•	The results from linear regression model gave an understanding that 71.2% of the variability in ALE could be explained by the below factors which were used to build a model. The maximum impact being in the order of Ethnicity, Poverty, HIV, Obesity and Blood Pressure. 
+•	Correlation analysis revealed that having No_highschool diploma is highly related to depression, being uninsured, unemployed, use of drugs that impact ALE strongly.
+•	Kmeans Result helped us understand segments in our population data
+•	Random Forest and Decision Tree models provided almost the same accuracy of ~92% with major decision making attributes being Poverty, Ethnicity, Exercising and Smoking.
+•	SVM with different kernels tried almost consistently gace a good result of ~97% accuracy with the factors being Ethnicity, Poverty, Exercising and Smoking.
+
+# Conclusions
+1.	The data set we chose really does fit it’s intended purpose, which was to assist local health agencies with assessing the needs of their communities. In addition, armed with this data they would be able to create programs and services that would directly impact the overall health of their communities.
+2.	Irrespective of how you cut the data, we saw that a lack of education (defined as no HS diploma) had the single largest impact on overall health. Though it wasn’t directly significant in the linear model, it had a high correlation to things like unemployment, drug use, and depression. These in turn contribute to a lower Average Life Expectancy (ALE). Programs that target education and/or gainful employment, especially in rural counties, would seem to have the largest impact.
+3.	In addition, communities with adverse behavioral or lifestyle choices (most notably those who don’t exercise, those who eat few fruits/vegetables, and those who smoke) are statistically more at risk for premature death. These correlations (negative correlative value to life expectancy) are within the individual’s control and would benefit from additional support within the community.
+4.	A general observation of the project is that while we chose a data set that allowed for each individual to learn something or probe in a different direction (e.g. some thinking about cancer, some looking at mental health and others suicide rates) it created a challenge in focusing in on a cohesive data story. The team was often caught between applying things we had learned in class (tools - ensure we “check all the right boxes”) and really understanding what the data was telling us. It was a great exercise to highlight the challenges in translating business needs (what do you want to know, how do you want to use the data) and the data side (coding) to ensure they are aligned.
+
